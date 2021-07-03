@@ -18,7 +18,9 @@ class ParkingEnv(AbstractEnv, GoalEnv):
 
     Credits to Munir Jojo-Verge for the idea and initial implementation.
     """
-
+    REWARD_WEIGHTS: ndarray = np.array([1, 0.3, 0, 0, 0.02, 0.02])  
+    SUCCESS_GOAL_REWARD: float = 0.06  
+    STEERING_RANGE: float = np.deg2rad(45) 
     @classmethod
     def default_config(cls) -> dict:
         config = super().default_config()
@@ -104,7 +106,105 @@ class ParkingEnv(AbstractEnv, GoalEnv):
         :param dict info: any supplementary information
         :param p: the Lp^p norm used in the reward. Use p<1 to have high kurtosis for rewards in [0, 1]
         :return: the corresponding reward
+        
         """
+        penalty = 0             #進入懲罰區懲罰
+        #penalty_angle = 0       #入庫角度過大懲罰
+        penalty_value = -0.6      #進入懲罰區懲罰值
+        #penalty_angle_value = 0 #入庫角度過大懲罰值
+        a0 = (achieved_goal[0], achieved_goal[1]) #中心點
+        a1 = (achieved_goal[0]-0.025, achieved_goal[1]-0.01) #左上點
+        a2 = (achieved_goal[0]-0.025, achieved_goal[1]+0.01) #左下點
+        a3 = (achieved_goal[0]+0.025, achieved_goal[1]+0.01) #右下點
+        a4 = (achieved_goal[0]+0.025, achieved_goal[1]-0.01) #右上點
+        a5 = (achieved_goal[0], achieved_goal[1]+0.01) #側下點
+        a6 = (achieved_goal[0], achieved_goal[1]-0.01) #側上點
+        a7 = (achieved_goal[0]+0.025, achieved_goal[1])#右側點
+        a8 = (achieved_goal[0]-0.025, achieved_goal[1])#左側點
+        dx = desired_goal[0]
+        dy = desired_goal[1]
+        #.astype(np.float64)
+        #
+        theta1 = np.degrees(np.arccos(achieved_goal[4])) 
+        theta2 = np.degrees(np.arcsin(achieved_goal[5]))
+        rotate_theta = 0
+        
+        if (theta1 >[0]).all() and (theta2 > [0]).all():
+            #print("2")
+            rotate_theta = theta1
+        else:
+            rotate_theta = 180 - theta1
+            #print("1")
+        #print(theta1, rotate_theta)
+
+        rotate_radians = np.radians(rotate_theta)
+
+        
+        rx1 = (a1[0]-a0[0])*(np.cos(rotate_radians))-(a1[1]-a0[1])*(np.sin(rotate_radians))+a0[0]
+        ry1 = (a1[1]-a0[1])*(np.cos(rotate_radians))+(a1[0]-a0[0])*(np.sin(rotate_radians))+a0[1]
+        rx2 = (a2[0]-a0[0])*(np.cos(rotate_radians))-(a2[1]-a0[1])*(np.sin(rotate_radians))+a0[0]
+        ry2 = (a2[1]-a0[1])*(np.cos(rotate_radians))+(a2[0]-a0[0])*(np.sin(rotate_radians))+a0[1]
+        rx3 = (a3[0]-a0[0])*(np.cos(rotate_radians))-(a3[1]-a0[1])*(np.sin(rotate_radians))+a0[0]
+        ry3 = (a3[1]-a0[1])*(np.cos(rotate_radians))+(a3[0]-a0[0])*(np.sin(rotate_radians))+a0[1]
+        rx4 = (a4[0]-a0[0])*(np.cos(rotate_radians))-(a4[1]-a0[1])*(np.sin(rotate_radians))+a0[0]
+        ry4 = (a4[1]-a0[1])*(np.cos(rotate_radians))+(a4[0]-a0[0])*(np.sin(rotate_radians))+a0[1]
+        rx5 = (a5[0]-a0[0])*(np.cos(rotate_radians))-(a5[1]-a0[1])*(np.sin(rotate_radians))+a0[0]
+        ry5 = (a5[1]-a0[1])*(np.cos(rotate_radians))+(a5[0]-a0[0])*(np.sin(rotate_radians))+a0[1]
+        rx6 = (a6[0]-a0[0])*(np.cos(rotate_radians))-(a6[1]-a0[1])*(np.sin(rotate_radians))+a0[0]
+        ry6 = (a6[1]-a0[1])*(np.cos(rotate_radians))+(a6[0]-a0[0])*(np.sin(rotate_radians))+a0[1]
+        
+        b1 = [0.28]
+        b2 = [-0.32]
+        b3 = [0.18]
+        b4 =[-0.18]
+        if (rx1 > b1).all() or (rx2 > b1).all() or (rx3 > b1).all() or (rx4 > b1).all() or (rx5 > b1).all() or (rx6 > b1).all():
+            penalty = penalty_value      #右半
+        elif (rx1 < b2).all() or (rx2 < b2).all() or (rx3 < b2).all() or (rx4 < b2).all() or (rx5 < b2).all() or (rx6 < b2).all():
+            penalty = penalty_value      #左半
+        elif (ry1 > b3).all or (ry2 > b3).all() or (ry3 > b3).all() or (ry4 > b3).all() or (ry5 > b3).all() or (ry6 > b3).all():
+            penalty = penalty_value      #下半
+        elif (ry1 < b4).all() or (ry2 < b4).all() or (ry3 < b4).all() or (ry4 < b4).all() or (ry5 < b4).all() or (ry6 < b4).all():
+            penalty = penalty_value      #上半
+        elif (dx+[0.02] < rx1 < [0.28]).all() and (dy-[0.045] < ry1 < dy+[0.045]).all():   
+            penalty = penalty_value      #第一個點在停車場右邊區域
+        elif (dx+[0.02] < rx2 < [0.28]).all() and (dy-[0.045] < ry2 < dy+[0.045]).all():
+            penalty = penalty_value     #第二個點在停車場右邊區域
+        elif (dx+[0.02] < rx3 < [0.28]).all() and (dy-[0.045] < ry3 < dy+[0.045]).all():
+            penalty = penalty_value      #第三個點在停車場右邊區域
+        elif (dx+[0.02] < rx4 < [0.28]).all() and (dy-[0.045] < ry4 < dy+[0.045]).all():
+            penalty = penalty_value      #第四個點在停車場右邊區域
+        elif (dx+[0.02] < rx5 < [0.28]).all() and (dy-[0.045] < ry5 < dy+[0.045]).all():
+            penalty = penalty_value      #第五個點在停車場右邊區域
+        elif (dx+[0.02] < rx6 < [0.28]).all() and (dy-[0.045] < ry6 < dy+[0.045]).all():
+            penalty = penalty_value      #第六個點在停車場右邊區域
+        elif ([-0.32] < rx1 < dx-[0.02]).all() and (dy-[0.045] < ry1 < dy+[0.045]).all():
+            penalty = penalty_value      #第一個點在停車場左邊區域
+        elif ([-0.32] < rx2 < dx-[0.02]).all() and (dy-[0.045] < ry2 < dy+[0.045]).all():
+            penalty = penalty_value      #第二個點在停車場左邊區域
+        elif ([-0.32] < rx3 < dx-[0.02]).all() and (dy-[0.045] < ry3 < dy+[0.045]).all():
+            penalty = penalty_value      #第三個點在停車場左邊區域
+        elif ([-0.32] < rx4 < dx-[0.02]).all() and (dy-[0.045] < ry4 < dy+[0.045]).all():
+            penalty = penalty_value      #第四個點在停車場左邊區域
+        elif ([-0.32] < rx5 < dx-[0.02]).all() and (dy-[0.045] < ry5 < dy+[0.045]).all():
+            penalty = penalty_value      #第五個點在停車場左邊區域
+        elif ([-0.32] < rx6 < dx-[0.02]).all() and (dy-[0.045] < ry6 < dy+[0.045]).all():
+            penalty = penalty_value      #第六個點在停車場左邊區域
+        elif ([-0.32] < rx1 < [0.28]).all() and (-dy-[0.045] < ry1 < -dy+[0.045]).all():
+            penalty = penalty_value      #第一個點在停車場相反區域
+        elif ([-0.32] < rx2 < [0.28]).all() and (-dy-[0.045] < ry2 < -dy+[0.045]).all():
+            penalty = penalty_value      #第二個點在停車場相反區域
+        elif ([-0.32] < rx3 < [0.28]).all() and (-dy-[0.045] < ry3 < -dy+[0.045]).all():
+            penalty = penalty_value      #第三個點在停車場相反區域
+        elif ([-0.32] < rx4 < [0.28]).all() and (-dy-[0.045] < ry4 < -dy+[0.045]).all():
+            penalty = penalty_value      #第四個點在停車場相反區域
+        elif ([-0.32] < rx5 < [0.28]).all() and (-dy-[0.045] < ry5 < -dy+[0.045]).all():
+            penalty = penalty_value      #第五個點在停車場相反區域
+        elif ([-0.32] < rx6 < [0.28]).all() and (-dy-[0.045] < ry6 < -dy+[0.045]).all():
+            penalty = penalty_value      #第六個點在停車場相反區域      
+        
+        c = - np.power(np.dot(np.abs(achieved_goal - desired_goal), self.REWARD_WEIGHTS), p) + penalty
+        #print("c",c)
+        return c
         return -np.power(np.dot(np.abs(achieved_goal - desired_goal), self.config["reward_weights"]), p)
 
     def _reward(self, action: np.ndarray) -> float:
